@@ -7,16 +7,17 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 from langchain.chains import RetrievalQA
 
 # ==========================
-# Konfigurasi halaman Streamlit
+# Konfigurasi Streamlit
 # ==========================
 st.set_page_config(page_title="HOI4 Chatbot (FLAN-T5)", layout="wide")
-st.title("🧠 HOI4 Chatbot (FLAN-T5)")
-st.markdown("Tanya jawab berbasis Wiki Hearts of Iron IV menggunakan model **FLAN-T5**.")
+st.title("🧠 HOI4 Chatbot (FLAN-T5 Local)")
+st.markdown("Tanya jawab berbasis Wiki Hearts of Iron IV menggunakan model **FLAN-T5** secara lokal.")
 
 # ==========================
 # Load Vectorstore
 # ==========================
 st.info("📥 Memuat vectorstore...")
+
 embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 vectorstore_path = "hoi4_vectorstore"
 
@@ -24,51 +25,46 @@ if not os.path.exists(vectorstore_path):
     st.error("❌ Folder vectorstore tidak ditemukan. Jalankan proses penyimpanan terlebih dahulu.")
     st.stop()
 
-# Cache vectorstore untuk mencegah pemuatan ulang
-# Cache vectorstore untuk mencegah pemuatan ulang
 @st.cache_resource
-def load_vectorstore(path, _embeddings): # <--- Add underscore here
+def load_vectorstore(path, _embeddings):
     return FAISS.load_local(path, _embeddings, allow_dangerous_deserialization=True)
 
 vectorstore = load_vectorstore(vectorstore_path, embedding_model)
 st.success("✅ Vectorstore berhasil dimuat.")
 
 # ==========================
-# Load Model FLAN-T5
+# Load Model FLAN-T5 Lokal
 # ==========================
 st.info("🤖 Memuat model FLAN-T5...")
 
-# Cache model untuk mencegah pemuatan ulang
 @st.cache_resource
 def load_flan_model():
-    flan_tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
-    flan_model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+    model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
 
-    # Pindah ke GPU kalau tersedia
     if torch.cuda.is_available():
-        flan_model = flan_model.to("cuda")
+        model = model.to("cuda")
 
-    flan_pipe = pipeline(
+    flan_pipeline = pipeline(
         "text2text-generation",
-        model=flan_model,
-        tokenizer=flan_tokenizer,
+        model=model,
+        tokenizer=tokenizer,
         max_new_tokens=256,
         do_sample=True,
         temperature=0.7
     )
-    flan_llm = HuggingFacePipeline(pipeline=flan_pipe)
-    return flan_llm
+    return HuggingFacePipeline(pipeline=flan_pipeline)
 
 flan_llm = load_flan_model()
 st.success("✅ Model FLAN-T5 berhasil dimuat.")
 
 # ==========================
-# Buat RAG Chain untuk model FLAN-T5
+# Buat Chain QnA
 # ==========================
 flan_qa = RetrievalQA.from_chain_type(llm=flan_llm, retriever=vectorstore.as_retriever())
 
 # ==========================
-# Session State untuk Riwayat Chat
+# Session State Chat
 # ==========================
 if "flan_messages" not in st.session_state:
     st.session_state.flan_messages = []
@@ -86,14 +82,14 @@ user_input = st.text_input("Pertanyaan:", placeholder="Contoh: Bagaimana cara me
 if user_input:
     with st.spinner("🔍 Mengambil jawaban dari FLAN-T5..."):
         try:
-            flan_result = flan_qa.invoke({"query": user_input})
-            flan_answer = flan_result["result"] if isinstance(flan_result, dict) else flan_result
-            st.session_state.flan_messages.append((user_input, flan_answer))
+            result = flan_qa.invoke({"query": user_input})
+            answer = result["result"] if isinstance(result, dict) else result
+            st.session_state.flan_messages.append((user_input, answer))
         except Exception as e:
             st.session_state.flan_messages.append((user_input, f"❌ Error: {e}"))
 
 # ==========================
-# Tampilkan Riwayat Chat
+# Tampilkan Riwayat
 # ==========================
 st.markdown("---")
 st.subheader("📜 Riwayat Chat")
