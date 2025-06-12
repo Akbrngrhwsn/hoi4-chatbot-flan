@@ -1,3 +1,5 @@
+# ========== appflan.py (Versi Tanpa API / Load Lokal) ==========
+
 import os
 import torch
 import streamlit as st
@@ -6,16 +8,10 @@ from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 from langchain.chains import RetrievalQA
 
-# ==========================
-# Konfigurasi Streamlit
-# ==========================
 st.set_page_config(page_title="HOI4 Chatbot (FLAN-T5)", layout="wide")
 st.title("🧠 HOI4 Chatbot (FLAN-T5 Local)")
 st.markdown("Tanya jawab berbasis Wiki Hearts of Iron IV menggunakan model **FLAN-T5** secara lokal.")
 
-# ==========================
-# Load Vectorstore
-# ==========================
 st.info("📥 Memuat vectorstore...")
 
 embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -32,19 +28,14 @@ def load_vectorstore(path, _embeddings):
 vectorstore = load_vectorstore(vectorstore_path, embedding_model)
 st.success("✅ Vectorstore berhasil dimuat.")
 
-# ==========================
-# Load Model FLAN-T5 Lokal
-# ==========================
 st.info("🤖 Memuat model FLAN-T5...")
 
 @st.cache_resource
 def load_flan_model():
     tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
     model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
-
     if torch.cuda.is_available():
         model = model.to("cuda")
-
     flan_pipeline = pipeline(
         "text2text-generation",
         model=model,
@@ -58,27 +49,15 @@ def load_flan_model():
 flan_llm = load_flan_model()
 st.success("✅ Model FLAN-T5 berhasil dimuat.")
 
-# ==========================
-# Buat Chain QnA
-# ==========================
 flan_qa = RetrievalQA.from_chain_type(llm=flan_llm, retriever=vectorstore.as_retriever())
 
-# ==========================
-# Session State Chat
-# ==========================
 if "flan_messages" not in st.session_state:
     st.session_state.flan_messages = []
 
-# ==========================
-# UI Input
-# ==========================
 st.markdown("---")
 st.subheader("💬 Tanyakan sesuatu seputar HoI4")
 user_input = st.text_input("Pertanyaan:", placeholder="Contoh: Bagaimana cara membuat faksi sendiri?", key="flan_user_input")
 
-# ==========================
-# Proses Jawaban
-# ==========================
 if user_input:
     with st.spinner("🔍 Mengambil jawaban dari FLAN-T5..."):
         try:
@@ -88,9 +67,6 @@ if user_input:
         except Exception as e:
             st.session_state.flan_messages.append((user_input, f"❌ Error: {e}"))
 
-# ==========================
-# Tampilkan Riwayat
-# ==========================
 st.markdown("---")
 st.subheader("📜 Riwayat Chat")
 
